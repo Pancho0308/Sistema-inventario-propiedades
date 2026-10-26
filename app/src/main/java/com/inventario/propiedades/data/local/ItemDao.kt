@@ -15,6 +15,9 @@ interface ItemDao {
     @Query("UPDATE items SET status = :status WHERE id = :itemId AND roomId = :roomId")
     suspend fun updateStatus(roomId: Long, itemId: Long, status: ItemStatus): Int
 
+    @Query("UPDATE items SET status = :status WHERE roomId = :roomId AND status IS NULL")
+    suspend fun updateUnreviewedStatus(roomId: Long, status: ItemStatus): Int
+
     @Query("SELECT * FROM items WHERE roomId = :roomId ORDER BY id")
     suspend fun getByRoom(roomId: Long): List<ItemEntity>
 

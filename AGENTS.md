@@ -22,7 +22,7 @@ Estados del artículo: NUEVO, BUENO, DESGASTADO, DAÑADO, FALTANTE, o sin revisa
 1. Base y Room: hecha.
 2. Propiedades y navegación: hecha.
 3. Habitaciones y checklist: hecha.
-3b. Checklist compacto con fila de chips y "Marcar todo como Bueno": pendiente.
+3b. Checklist compacto con fila de chips y "Marcar todo como Bueno": hecha; el marcado masivo es atómico y solo afecta artículos sin revisar de la habitación.
 4. Fotos con CameraX: pendiente.
 5. Plantillas y clonar: pendiente.
 6. PDF con fotos y firma: pendiente.
@@ -32,7 +32,7 @@ Estados del artículo: NUEVO, BUENO, DESGASTADO, DAÑADO, FALTANTE, o sin revisa
 
 - Último commit al crear este archivo: `e460eb8` — `feat: agregar habitaciones y checklist (fase 3)`.
 - El árbol de trabajo estaba limpio antes de crear este archivo.
-- La Fase 3b no está implementada: el checklist usa tarjetas con botones en dos columnas y no tiene la acción "Marcar todo como Bueno".
+- En ese punto de partida, la Fase 3b no estaba implementada: el checklist usaba tarjetas con botones en dos columnas y no tenía la acción "Marcar todo como Bueno".
 - Código principal: `app/src/main/java/com/inventario/propiedades/`, con `data/local`, repositorios en `data` y pantallas/ViewModels en `ui/properties`, `ui/rooms`, `ui/checklist` y `ui/navigation`.
 - Pruebas instrumentadas: `app/src/androidTest/`. Esquemas Room: `app/schemas/`.
 - Este punto de partida es histórico: comprobar `git status`, el historial y el código antes de asumir el estado en una sesión futura.
@@ -46,4 +46,4 @@ Estados del artículo: NUEVO, BUENO, DESGASTADO, DAÑADO, FALTANTE, o sin revisa
 - Al terminar una implementación: compilar con `./gradlew assembleDebug`, correr tests, resumir los resultados y hacer commit.
 - Para tests locales usar `./gradlew testDebugUnitTest`; para los tests instrumentados existentes, `./gradlew connectedDebugAndroidTest` con dispositivo o emulador disponible. Informar cualquier verificación que no se pueda ejecutar.
 - Comentarios del código en español; nombres de identificadores en inglés.
-- En esta sesión solo se autorizó reconocer el estado y crear este archivo: esperar instrucciones antes de implementar la Fase 3b.
+- La autorización de la Fase 3b incluyó el cambio mínimo de DAO, repositorio y ViewModel para el marcado masivo. No avanzar a la Fase 4 sin indicación del usuario.

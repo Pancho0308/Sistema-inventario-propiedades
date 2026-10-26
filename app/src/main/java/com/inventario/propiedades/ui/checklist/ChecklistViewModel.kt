@@ -37,6 +37,8 @@ class ChecklistViewModel(private val repository: ItemRepository, private val roo
         private set
     var saveError by mutableStateOf<String?>(null)
         private set
+    var isMarkingAll by mutableStateOf(false)
+        private set
 
     private val statusMutex = Mutex()
 
@@ -65,6 +67,23 @@ class ChecklistViewModel(private val repository: ItemRepository, private val roo
                 addError = "No se pudo agregar. Intenta nuevamente."
             } finally {
                 isAdding = false
+            }
+        }
+    }
+
+    fun markAllAsGood() {
+        if (isMarkingAll) return
+        isMarkingAll = true
+        saveError = null
+        viewModelScope.launch {
+            try {
+                statusMutex.withLock { repository.markUnreviewedAsGood(roomId) }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                saveError = "No se pudieron marcar los artículos. Intenta nuevamente."
+            } finally {
+                isMarkingAll = false
             }
         }
     }

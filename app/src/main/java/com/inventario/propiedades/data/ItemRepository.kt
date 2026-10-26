@@ -15,4 +15,7 @@ class ItemRepository(private val itemDao: ItemDao) {
     suspend fun setStatus(roomId: Long, itemId: Long, status: ItemStatus) {
         check(itemDao.updateStatus(roomId, itemId, status) == 1) { "El artículo ya no existe en esta habitación" }
     }
+
+    suspend fun markUnreviewedAsGood(roomId: Long): Int =
+        itemDao.updateUnreviewedStatus(roomId, ItemStatus.BUENO)
 }

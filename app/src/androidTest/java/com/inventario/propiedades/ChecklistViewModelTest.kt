@@ -144,6 +144,97 @@ class ChecklistViewModelTest : DatabaseTestCase() {
         onMain { assertNull(model.saveError) }
     }
 
+    fun testBulkUsesOneWriteAndChecksUnreviewedAtSaveTime() = runBlocking {
+        val roomId = createRoom(createProperty())
+        val actual = database.itemDao()
+        val first = actual.insert(ItemEntity(roomId = roomId, name = "Mesa"))
+        val second = actual.insert(ItemEntity(roomId = roomId, name = "Silla"))
+        val gate = CompletableDeferred<Unit>()
+        var calls = 0
+        val dao = object : ItemDao by actual {
+            override suspend fun updateUnreviewedStatus(roomId: Long, status: ItemStatus): Int {
+                calls++
+                assertEquals(ItemStatus.BUENO, status)
+                gate.await()
+                return actual.updateUnreviewedStatus(roomId, status)
+            }
+        }
+        val model = createViewModel { ChecklistViewModel(ItemRepository(dao), roomId) }
+        model.uiState.await { !it.isLoading }
+        onMain {
+            model.markAllAsGood()
+            model.markAllAsGood()
+            assertTrue(model.isMarkingAll)
+            assertEquals(1, calls)
+        }
+        // Simula otra escritura mientras la operación está pendiente: no debe sobrescribirla.
+        actual.updateStatus(roomId, first, ItemStatus.DAÑADO)
+        gate.complete(Unit)
+        model.uiState.await { it.items.any { item -> item.id == second && item.status == ItemStatus.BUENO } }
+        awaitMain { !model.isMarkingAll }
+        assertEquals(ItemStatus.DAÑADO, actual.getById(first)!!.status)
+        onMain {
+            assertEquals(1, calls)
+            assertNull(model.saveError)
+        }
+    }
+
+    fun testBulkFailurePreservesStatusesAndAllowsRetry() = runBlocking {
+        val roomId = createRoom(createProperty())
+        val actual = database.itemDao()
+        val id = actual.insert(ItemEntity(roomId = roomId, name = "Mesa"))
+        var failWrite = true
+        val dao = object : ItemDao by actual {
+            override suspend fun updateUnreviewedStatus(roomId: Long, status: ItemStatus): Int {
+                if (failWrite) error("Error de prueba")
+                return actual.updateUnreviewedStatus(roomId, status)
+            }
+        }
+        val model = createViewModel { ChecklistViewModel(ItemRepository(dao), roomId) }
+        onMain { model.markAllAsGood() }
+        awaitMain { model.saveError != null && !model.isMarkingAll }
+        assertNull(actual.getById(id)!!.status)
+        onMain {
+            failWrite = false
+            model.markAllAsGood()
+        }
+        model.uiState.await { it.items.singleOrNull()?.status == ItemStatus.BUENO }
+        awaitMain { !model.isMarkingAll }
+        onMain { assertNull(model.saveError) }
+    }
+
+    fun testBulkAndIndividualWritesKeepTapOrder() = runBlocking {
+        val roomId = createRoom(createProperty())
+        val actual = database.itemDao()
+        val first = actual.insert(ItemEntity(roomId = roomId, name = "Mesa"))
+        val second = actual.insert(ItemEntity(roomId = roomId, name = "Silla"))
+        val gate = CompletableDeferred<Unit>()
+        val writes = mutableListOf<String>()
+        val dao = object : ItemDao by actual {
+            override suspend fun updateStatus(roomId: Long, itemId: Long, status: ItemStatus): Int {
+                writes.add(status.name)
+                if (writes.size == 1) gate.await()
+                return actual.updateStatus(roomId, itemId, status)
+            }
+            override suspend fun updateUnreviewedStatus(roomId: Long, status: ItemStatus): Int {
+                writes.add("all")
+                return actual.updateUnreviewedStatus(roomId, status)
+            }
+        }
+        val model = createViewModel { ChecklistViewModel(ItemRepository(dao), roomId) }
+        onMain {
+            model.selectStatus(first, ItemStatus.DAÑADO)
+            model.markAllAsGood()
+            model.selectStatus(first, ItemStatus.NUEVO)
+            assertEquals(listOf("DAÑADO"), writes)
+        }
+        gate.complete(Unit)
+        model.uiState.await { it.items.any { item -> item.id == first && item.status == ItemStatus.NUEVO } }
+        awaitMain { !model.isMarkingAll }
+        assertEquals(ItemStatus.BUENO, actual.getById(second)!!.status)
+        onMain { assertEquals(listOf("DAÑADO", "all", "NUEVO"), writes) }
+    }
+
     fun testReadFailureIsVisible() = runBlocking {
         val dao = object : ItemDao by database.itemDao() {
             override fun observeByRoom(roomId: Long): Flow<List<ItemEntity>> = flow { error("Error de lectura de prueba") }
