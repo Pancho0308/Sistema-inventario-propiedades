@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -40,9 +41,13 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -53,14 +58,27 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.inventario.propiedades.data.PhotoStorage
+import com.inventario.propiedades.ui.photos.PhotoImage
+import com.inventario.propiedades.ui.photos.PhotoViewer
 import com.inventario.propiedades.data.local.ItemEntity
 import com.inventario.propiedades.data.local.ItemStatus
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ChecklistScreen(viewModel: ChecklistViewModel, onBack: () -> Unit) {
+fun ChecklistScreen(viewModel: ChecklistViewModel, photos: PhotoStorage, onCamera: (Long) -> Unit, onBack: () -> Unit) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val error = state.error
+    var viewingPhotoId by rememberSaveable { mutableStateOf<Long?>(null) }
+    val viewingItem = state.items.firstOrNull { it.id == viewingPhotoId && it.photoPath != null }
+    val listState = rememberLazyListState()
+    if (viewingItem != null) {
+        PhotoViewer(viewingItem, photos,
+            onDismiss = { viewingPhotoId = null },
+            onReplace = { viewingPhotoId = null; onCamera(viewingItem.id) },
+            onDelete = { viewingPhotoId = null; viewModel.removePhoto(viewingItem.id) })
+        return
+    }
     Scaffold(topBar = {
         TopAppBar(
             title = { Text("Checklist") },
@@ -85,11 +103,14 @@ fun ChecklistScreen(viewModel: ChecklistViewModel, onBack: () -> Unit) {
                 error != null -> Text(error, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(24.dp))
                 else -> LazyColumn(
                     modifier = Modifier.fillMaxSize(),
+                    state = listState,
                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     items(state.items, key = { it.id }) { item ->
-                        ItemChecklistCard(item, onStatusClick = { viewModel.selectStatus(item.id, it) })
+                        ItemChecklistCard(item, photos,
+                            onPhotoClick = { if (item.photoPath == null) onCamera(item.id) else viewingPhotoId = item.id },
+                            onStatusClick = { viewModel.selectStatus(item.id, it) })
                     }
                     item(key = "add-item") { AddItemField(viewModel) }
                 }
@@ -99,56 +120,72 @@ fun ChecklistScreen(viewModel: ChecklistViewModel, onBack: () -> Unit) {
 }
 
 @Composable
-private fun ItemChecklistCard(item: ItemEntity, onStatusClick: (ItemStatus) -> Unit) {
+private fun ItemChecklistCard(item: ItemEntity, photos: PhotoStorage, onPhotoClick: () -> Unit, onStatusClick: (ItemStatus) -> Unit) {
     Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(item.name, modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleSmall,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis)
-                if (item.status == null) {
-                    Text("• Sin revisar", color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        style = MaterialTheme.typography.labelSmall)
+        Row(Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 40.dp) {
+                val path = item.photoPath
+                if (path != null) {
+                    Surface(onClick = onPhotoClick, modifier = Modifier.size(40.dp), shape = RoundedCornerShape(6.dp)) {
+                        PhotoImage(path, photos, 128, Modifier.fillMaxSize(), "Ver foto de ${item.name}", ContentScale.Crop)
+                    }
+                } else {
+                    TextButton(onClick = onPhotoClick, contentPadding = PaddingValues(0.dp),
+                        modifier = Modifier.size(40.dp).semantics { contentDescription = "Fotografiar ${item.name}" }) {
+                        Text("Foto", style = MaterialTheme.typography.labelSmall)
+                    }
                 }
             }
-            CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 40.dp) {
-                Row(Modifier.fillMaxWidth().selectableGroup(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    ItemStatus.entries.forEach { status ->
-                        val isSelected = item.status == status
-                        val color = when (status) {
-                            ItemStatus.NUEVO -> Color(0xFF1565C0)
-                            ItemStatus.BUENO -> Color(0xFF2E7D32)
-                            ItemStatus.DESGASTADO -> Color(0xFF8D6E00)
-                            ItemStatus.DAÑADO -> Color(0xFFC62828)
-                            ItemStatus.FALTANTE -> Color(0xFF616161)
-                        }
-                        val icon = when (status) {
-                            ItemStatus.NUEVO -> Icons.Default.Star
-                            ItemStatus.BUENO -> Icons.Default.Check
-                            ItemStatus.DESGASTADO -> Icons.Default.Warning
-                            ItemStatus.DAÑADO -> Icons.Default.Close
-                            ItemStatus.FALTANTE -> Icons.Default.Search
-                        }
-                        Surface(
-                            selected = isSelected,
-                            onClick = { onStatusClick(status) },
-                            modifier = (if (isSelected) Modifier.weight(1f) else Modifier.width(40.dp))
-                                .heightIn(min = 40.dp).semantics { contentDescription = "${item.name}: ${status.name}" },
-                            shape = RoundedCornerShape(12.dp),
-                            color = color.copy(alpha = if (isSelected) 0.18f else 0.06f),
-                            contentColor = color,
-                            border = BorderStroke(if (isSelected) 2.dp else 1.dp, color.copy(alpha = if (isSelected) 1f else 0.4f)),
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth().heightIn(min = 40.dp).padding(horizontal = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally),
+            Column(Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(item.name, modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleSmall,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    if (item.status == null) {
+                        Text("• Sin revisar", color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+                CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 40.dp) {
+                    Row(Modifier.fillMaxWidth().selectableGroup(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        ItemStatus.entries.forEach { status ->
+                            val isSelected = item.status == status
+                            val color = when (status) {
+                                ItemStatus.NUEVO -> Color(0xFF1565C0)
+                                ItemStatus.BUENO -> Color(0xFF2E7D32)
+                                ItemStatus.DESGASTADO -> Color(0xFF8D6E00)
+                                ItemStatus.DAÑADO -> Color(0xFFC62828)
+                                ItemStatus.FALTANTE -> Color(0xFF616161)
+                            }
+                            val icon = when (status) {
+                                ItemStatus.NUEVO -> Icons.Default.Star
+                                ItemStatus.BUENO -> Icons.Default.Check
+                                ItemStatus.DESGASTADO -> Icons.Default.Warning
+                                ItemStatus.DAÑADO -> Icons.Default.Close
+                                ItemStatus.FALTANTE -> Icons.Default.Search
+                            }
+                            Surface(
+                                selected = isSelected,
+                                onClick = { onStatusClick(status) },
+                                modifier = (if (isSelected) Modifier.weight(1f) else Modifier.width(40.dp))
+                                    .heightIn(min = 40.dp).semantics { contentDescription = "${item.name}: ${status.name}" },
+                                shape = RoundedCornerShape(12.dp),
+                                color = color.copy(alpha = if (isSelected) 0.18f else 0.06f),
+                                contentColor = color,
+                                border = BorderStroke(if (isSelected) 2.dp else 1.dp, color.copy(alpha = if (isSelected) 1f else 0.4f)),
                             ) {
-                                Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp))
-                                if (isSelected) {
-                                    Text(status.name.lowercase().replaceFirstChar { it.titlecase() },
-                                        modifier = Modifier.clearAndSetSemantics { },
-                                        style = MaterialTheme.typography.labelSmall,
-                                        maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().heightIn(min = 40.dp).padding(horizontal = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally),
+                                ) {
+                                    Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    if (isSelected) {
+                                        Text(status.name.lowercase().replaceFirstChar { it.titlecase() },
+                                            modifier = Modifier.clearAndSetSemantics { },
+                                            style = MaterialTheme.typography.labelSmall,
+                                            maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    }
                                 }
                             }
                         }

@@ -16,7 +16,7 @@ class ChecklistViewModelTest : DatabaseTestCase() {
         val roomId = createRoom(propertyId)
         val otherId = createRoom(propertyId, "Dormitorio")
         database.itemDao().insert(ItemEntity(roomId = otherId, name = "Cama"))
-        val model = createViewModel { ChecklistViewModel(ItemRepository(database.itemDao()), roomId) }
+        val model = createViewModel { ChecklistViewModel(ItemRepository(database, photoStorage), roomId) }
         assertTrue(model.uiState.await { !it.isLoading }.items.isEmpty())
         onMain {
             model.updateNewItemName("  Mesa  ")
@@ -31,7 +31,7 @@ class ChecklistViewModelTest : DatabaseTestCase() {
 
     fun testRejectsBlankName() = runBlocking {
         val roomId = createRoom(createProperty())
-        val model = createViewModel { ChecklistViewModel(ItemRepository(database.itemDao()), roomId) }
+        val model = createViewModel { ChecklistViewModel(ItemRepository(database, photoStorage), roomId) }
         onMain {
             model.updateNewItemName("   ")
             model.addItem()
@@ -51,7 +51,7 @@ class ChecklistViewModelTest : DatabaseTestCase() {
                 return actual.insert(item)
             }
         }
-        val model = createViewModel { ChecklistViewModel(ItemRepository(dao), roomId) }
+        val model = createViewModel { ChecklistViewModel(ItemRepository(database, photoStorage, dao), roomId) }
         onMain {
             model.updateNewItemName("Mesa")
             model.addItem()
@@ -76,7 +76,7 @@ class ChecklistViewModelTest : DatabaseTestCase() {
                 return actual.insert(item)
             }
         }
-        val model = createViewModel { ChecklistViewModel(ItemRepository(dao), roomId) }
+        val model = createViewModel { ChecklistViewModel(ItemRepository(database, photoStorage, dao), roomId) }
         onMain {
             model.updateNewItemName("Silla")
             model.addItem()
@@ -105,7 +105,7 @@ class ChecklistViewModelTest : DatabaseTestCase() {
                 return actual.updateStatus(roomId, itemId, status)
             }
         }
-        val model = createViewModel { ChecklistViewModel(ItemRepository(dao), roomId) }
+        val model = createViewModel { ChecklistViewModel(ItemRepository(database, photoStorage, dao), roomId) }
         onMain {
             ItemStatus.entries.forEach { model.selectStatus(id, it) }
             assertEquals(listOf(ItemStatus.NUEVO), writes)
@@ -132,7 +132,7 @@ class ChecklistViewModelTest : DatabaseTestCase() {
                 return actual.updateStatus(roomId, itemId, status)
             }
         }
-        val model = createViewModel { ChecklistViewModel(ItemRepository(dao), roomId) }
+        val model = createViewModel { ChecklistViewModel(ItemRepository(database, photoStorage, dao), roomId) }
         onMain { model.selectStatus(id, ItemStatus.DAÑADO) }
         awaitMain { model.saveError != null }
         assertNull(actual.getById(id)!!.status)
@@ -159,7 +159,7 @@ class ChecklistViewModelTest : DatabaseTestCase() {
                 return actual.updateUnreviewedStatus(roomId, status)
             }
         }
-        val model = createViewModel { ChecklistViewModel(ItemRepository(dao), roomId) }
+        val model = createViewModel { ChecklistViewModel(ItemRepository(database, photoStorage, dao), roomId) }
         model.uiState.await { !it.isLoading }
         onMain {
             model.markAllAsGood()
@@ -190,7 +190,7 @@ class ChecklistViewModelTest : DatabaseTestCase() {
                 return actual.updateUnreviewedStatus(roomId, status)
             }
         }
-        val model = createViewModel { ChecklistViewModel(ItemRepository(dao), roomId) }
+        val model = createViewModel { ChecklistViewModel(ItemRepository(database, photoStorage, dao), roomId) }
         onMain { model.markAllAsGood() }
         awaitMain { model.saveError != null && !model.isMarkingAll }
         assertNull(actual.getById(id)!!.status)
@@ -221,7 +221,7 @@ class ChecklistViewModelTest : DatabaseTestCase() {
                 return actual.updateUnreviewedStatus(roomId, status)
             }
         }
-        val model = createViewModel { ChecklistViewModel(ItemRepository(dao), roomId) }
+        val model = createViewModel { ChecklistViewModel(ItemRepository(database, photoStorage, dao), roomId) }
         onMain {
             model.selectStatus(first, ItemStatus.DAÑADO)
             model.markAllAsGood()
@@ -235,11 +235,50 @@ class ChecklistViewModelTest : DatabaseTestCase() {
         onMain { assertEquals(listOf("DAÑADO", "all", "NUEVO"), writes) }
     }
 
+    fun testRemovePhotoClearsPathAndKeepsItemStatus() = runBlocking {
+        val roomId = createRoom(createProperty())
+        val dao = database.itemDao()
+        val photo = photoStorage.saveCapture(createCapture())
+        val item = ItemEntity(roomId = roomId, name = "Mesa", status = ItemStatus.DAÑADO, note = "Nota", photoPath = photo.path)
+        val id = dao.insert(item)
+        val model = createViewModel { ChecklistViewModel(ItemRepository(database, photoStorage), roomId) }
+        model.uiState.await { !it.isLoading }
+        onMain { model.removePhoto(id) }
+        awaitMain { !model.isRemovingPhoto }
+        assertEquals(item.copy(id = id, photoPath = null), dao.getById(id))
+        assertFalse(photo.exists())
+        onMain { assertNull(model.saveError) }
+    }
+
+    fun testRemovePhotoFailureKeepsFileAndAllowsRetry() = runBlocking {
+        val roomId = createRoom(createProperty())
+        val actual = database.itemDao()
+        val photo = photoStorage.saveCapture(createCapture())
+        val id = actual.insert(ItemEntity(roomId = roomId, name = "Mesa", photoPath = photo.path))
+        var failWrite = true
+        val dao = object : ItemDao by actual {
+            override suspend fun updatePhotoPath(roomId: Long, itemId: Long, path: String?): Int {
+                if (failWrite) error("Error de prueba")
+                return actual.updatePhotoPath(roomId, itemId, path)
+            }
+        }
+        val model = createViewModel { ChecklistViewModel(ItemRepository(database, photoStorage, dao), roomId) }
+        onMain { model.removePhoto(id) }
+        awaitMain { model.saveError != null && !model.isRemovingPhoto }
+        assertTrue(photo.exists())
+        assertEquals(photo.path, actual.getById(id)!!.photoPath)
+        onMain { failWrite = false; model.removePhoto(id) }
+        awaitMain { !model.isRemovingPhoto }
+        assertFalse(photo.exists())
+        assertNull(actual.getById(id)!!.photoPath)
+        onMain { assertNull(model.saveError) }
+    }
+
     fun testReadFailureIsVisible() = runBlocking {
         val dao = object : ItemDao by database.itemDao() {
             override fun observeByRoom(roomId: Long): Flow<List<ItemEntity>> = flow { error("Error de lectura de prueba") }
         }
-        val model = createViewModel { ChecklistViewModel(ItemRepository(dao), 1) }
+        val model = createViewModel { ChecklistViewModel(ItemRepository(database, photoStorage, dao), 1) }
         val state = model.uiState.await { !it.isLoading }
         assertNotNull(state.error)
         assertTrue(state.items.isEmpty())

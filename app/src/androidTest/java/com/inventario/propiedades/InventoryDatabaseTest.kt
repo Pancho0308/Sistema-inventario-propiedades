@@ -9,6 +9,8 @@ import android.test.AndroidTestCase
 import androidx.lifecycle.ViewModelStore
 import androidx.room.Room
 import com.inventario.propiedades.data.PropertyRepository
+import com.inventario.propiedades.data.PhotoStorage
+import java.io.File
 import com.inventario.propiedades.data.local.InventoryDatabase
 import com.inventario.propiedades.data.local.ItemEntity
 import com.inventario.propiedades.data.local.ItemStatus
@@ -124,7 +126,7 @@ class InventoryDatabaseTest : AndroidTestCase() {
 
     fun testRepositoryFlowEmitsCreatedProperty() = runBlocking {
         withTimeout(10_000) {
-            val repository = PropertyRepository(database.propertyDao())
+            val repository = PropertyRepository(database, PhotoStorage(File(context.cacheDir, "inventory-database-test")))
             val initial = CompletableDeferred<Unit>()
             val created = CompletableDeferred<PropertyEntity>()
             val collector = launch {
@@ -147,7 +149,7 @@ class InventoryDatabaseTest : AndroidTestCase() {
     }
 
     fun testRepositoryRejectsBlankFields() = runBlocking {
-        val repository = PropertyRepository(database.propertyDao())
+        val repository = PropertyRepository(database, PhotoStorage(File(context.cacheDir, "inventory-database-test")))
         for ((name, address) in listOf("" to "Calle 1", "   " to "Calle 1", "Nombre" to "", "Nombre" to "   ")) {
             try {
                 repository.create(name, address)
@@ -168,7 +170,7 @@ class InventoryDatabaseTest : AndroidTestCase() {
     fun testViewModelValidatesAndPreservesForm() {
         onMain {
             val store = ViewModelStore()
-            val viewModel = PropertyViewModel(PropertyRepository(database.propertyDao()))
+            val viewModel = PropertyViewModel(PropertyRepository(database, PhotoStorage(File(context.cacheDir, "inventory-database-test"))))
             store.put("properties", viewModel)
             try {
                 viewModel.openCreateDialog()

@@ -18,7 +18,7 @@ class RoomsViewModelTest : DatabaseTestCase() {
         val roomId = createRoom(propertyId)
         createRoom(createProperty(), "Otra propiedad")
         val itemId = database.itemDao().insert(ItemEntity(roomId = roomId, name = "Mesa"))
-        val model = createViewModel { RoomsViewModel(RoomRepository(database.roomDao()), propertyId) }
+        val model = createViewModel { RoomsViewModel(RoomRepository(database, photoStorage), propertyId) }
         val initial = model.uiState.await { !it.isLoading }
         assertEquals(listOf(roomId), initial.rooms.map { it.room.id })
         assertEquals(0, initial.rooms.single().reviewedItems)
@@ -29,7 +29,7 @@ class RoomsViewModelTest : DatabaseTestCase() {
 
     fun testRejectsBlankNameWithoutSaving() = runBlocking {
         val propertyId = createProperty()
-        val model = createViewModel { RoomsViewModel(RoomRepository(database.roomDao()), propertyId) }
+        val model = createViewModel { RoomsViewModel(RoomRepository(database, photoStorage), propertyId) }
         onMain {
             model.openCreateDialog()
             model.updateName("   ")
@@ -53,7 +53,7 @@ class RoomsViewModelTest : DatabaseTestCase() {
                 return actual.insert(room)
             }
         }
-        val model = createViewModel { RoomsViewModel(RoomRepository(dao), propertyId) }
+        val model = createViewModel { RoomsViewModel(RoomRepository(database, photoStorage, dao), propertyId) }
         onMain {
             model.openCreateDialog()
             model.updateName("  Baño  ")
@@ -82,7 +82,7 @@ class RoomsViewModelTest : DatabaseTestCase() {
                 return actual.insert(room)
             }
         }
-        val model = createViewModel { RoomsViewModel(RoomRepository(dao), propertyId) }
+        val model = createViewModel { RoomsViewModel(RoomRepository(database, photoStorage, dao), propertyId) }
         onMain {
             model.openCreateDialog()
             model.updateName("Living")
@@ -107,7 +107,7 @@ class RoomsViewModelTest : DatabaseTestCase() {
                 error("Error de lectura de prueba")
             }
         }
-        val model = createViewModel { RoomsViewModel(RoomRepository(dao), 1) }
+        val model = createViewModel { RoomsViewModel(RoomRepository(database, photoStorage, dao), 1) }
         val state = model.uiState.await { !it.isLoading }
         assertNotNull(state.error)
         assertTrue(state.rooms.isEmpty())

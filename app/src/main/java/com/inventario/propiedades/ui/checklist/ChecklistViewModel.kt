@@ -39,6 +39,8 @@ class ChecklistViewModel(private val repository: ItemRepository, private val roo
         private set
     var isMarkingAll by mutableStateOf(false)
         private set
+    var isRemovingPhoto by mutableStateOf(false)
+        private set
 
     private val statusMutex = Mutex()
 
@@ -67,6 +69,23 @@ class ChecklistViewModel(private val repository: ItemRepository, private val roo
                 addError = "No se pudo agregar. Intenta nuevamente."
             } finally {
                 isAdding = false
+            }
+        }
+    }
+
+    fun removePhoto(itemId: Long) {
+        if (isRemovingPhoto) return
+        isRemovingPhoto = true
+        saveError = null
+        viewModelScope.launch {
+            try {
+                repository.removePhoto(roomId, itemId)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                saveError = "No se pudo completar la eliminación de la foto. Revisa el artículo e intenta nuevamente."
+            } finally {
+                isRemovingPhoto = false
             }
         }
     }

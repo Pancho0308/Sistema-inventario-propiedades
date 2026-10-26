@@ -18,6 +18,18 @@ interface ItemDao {
     @Query("UPDATE items SET status = :status WHERE roomId = :roomId AND status IS NULL")
     suspend fun updateUnreviewedStatus(roomId: Long, status: ItemStatus): Int
 
+    @Query("UPDATE items SET photoPath = :path WHERE id = :itemId AND roomId = :roomId")
+    suspend fun updatePhotoPath(roomId: Long, itemId: Long, path: String?): Int
+
+    @Query("SELECT photoPath FROM items WHERE roomId = :roomId AND photoPath IS NOT NULL")
+    suspend fun getPhotoPathsByRoom(roomId: Long): List<String>
+
+    @Query("""
+        SELECT items.photoPath FROM items INNER JOIN rooms ON items.roomId = rooms.id
+        WHERE rooms.propertyId = :propertyId AND items.photoPath IS NOT NULL
+    """)
+    suspend fun getPhotoPathsByProperty(propertyId: Long): List<String>
+
     @Query("SELECT * FROM items WHERE roomId = :roomId ORDER BY id")
     suspend fun getByRoom(roomId: Long): List<ItemEntity>
 

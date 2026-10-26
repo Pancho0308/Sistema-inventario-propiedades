@@ -9,6 +9,9 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import com.inventario.propiedades.data.ItemRepository
+import com.inventario.propiedades.data.PhotoStorage
+import com.inventario.propiedades.ui.photos.CameraScreen
+import com.inventario.propiedades.ui.photos.CameraViewModel
 import com.inventario.propiedades.data.PropertyRepository
 import com.inventario.propiedades.data.RoomRepository
 import com.inventario.propiedades.ui.checklist.ChecklistScreen
@@ -28,8 +31,11 @@ data class RoomsRoute(val propertyId: Long)
 @Serializable
 data class ChecklistRoute(val roomId: Long)
 
+@Serializable
+data class CameraRoute(val roomId: Long, val itemId: Long)
+
 @Composable
-fun AppNavigation(repository: PropertyRepository, roomRepository: RoomRepository, itemRepository: ItemRepository) {
+fun AppNavigation(repository: PropertyRepository, roomRepository: RoomRepository, itemRepository: ItemRepository, photos: PhotoStorage) {
     val navController = rememberNavController()
     NavHost(navController = navController, startDestination = PropertiesRoute) {
         composable<PropertiesRoute> {
@@ -61,7 +67,18 @@ fun AppNavigation(repository: PropertyRepository, roomRepository: RoomRepository
             val checklistViewModel: ChecklistViewModel = viewModel(factory = viewModelFactory {
                 initializer { ChecklistViewModel(itemRepository, route.roomId) }
             })
-            ChecklistScreen(checklistViewModel, onBack = { navController.popBackStack() })
+            ChecklistScreen(checklistViewModel, photos,
+                onCamera = { itemId -> navController.navigate(CameraRoute(route.roomId, itemId)) { launchSingleTop = true } },
+                onBack = { navController.popBackStack() })
+        }
+        composable<CameraRoute> { entry ->
+            val route = entry.toRoute<CameraRoute>()
+            val cameraViewModel: CameraViewModel = viewModel(factory = viewModelFactory {
+                initializer { CameraViewModel(itemRepository, photos, route.roomId, route.itemId) }
+            })
+            CameraScreen(cameraViewModel,
+                onBack = { navController.popBackStack() },
+                onSaved = { navController.popBackStack() })
         }
     }
 }

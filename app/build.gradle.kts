@@ -55,6 +55,11 @@ dependencies {
     implementation("androidx.room:room-ktx:2.6.1")
     kapt("androidx.room:room-compiler:2.6.1")
 
+    implementation("androidx.camera:camera-core:1.4.2")
+    implementation("androidx.camera:camera-camera2:1.4.2")
+    implementation("androidx.camera:camera-lifecycle:1.4.2")
+    implementation("androidx.camera:camera-view:1.4.2")
+
     // Estas clases vienen con el SDK; solo se necesitan al compilar las pruebas.
     androidTestCompileOnly(files(
         "${android.sdkDirectory}/platforms/android-${android.compileSdk}/optional/android.test.base.jar",
