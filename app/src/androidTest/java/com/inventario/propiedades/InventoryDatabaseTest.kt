@@ -3,14 +3,29 @@
 package com.inventario.propiedades
 
 import android.database.sqlite.SQLiteConstraintException
+import android.os.Handler
+import android.os.Looper
 import android.test.AndroidTestCase
+import androidx.lifecycle.ViewModelStore
 import androidx.room.Room
+import com.inventario.propiedades.data.PropertyRepository
 import com.inventario.propiedades.data.local.InventoryDatabase
 import com.inventario.propiedades.data.local.ItemEntity
 import com.inventario.propiedades.data.local.ItemStatus
 import com.inventario.propiedades.data.local.PropertyEntity
+import com.inventario.propiedades.data.local.PropertyStatus
 import com.inventario.propiedades.data.local.RoomEntity
+import com.inventario.propiedades.ui.navigation.RoomsRoute
+import com.inventario.propiedades.ui.properties.PropertyViewModel
+import java.util.concurrent.FutureTask
+import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
+import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.descriptors.PrimitiveKind
 
 // Usa el runner de Android para no incorporar dependencias de pruebas adicionales.
 class InventoryDatabaseTest : AndroidTestCase() {
@@ -105,5 +120,83 @@ class InventoryDatabaseTest : AndroidTestCase() {
         } catch (_: SQLiteConstraintException) {
             assertNull(database.itemDao().getById(Long.MAX_VALUE))
         }
+    }
+
+    fun testRepositoryFlowEmitsCreatedProperty() = runBlocking {
+        withTimeout(10_000) {
+            val repository = PropertyRepository(database.propertyDao())
+            val initial = CompletableDeferred<Unit>()
+            val created = CompletableDeferred<PropertyEntity>()
+            val collector = launch {
+                repository.properties.collect { properties ->
+                    initial.complete(Unit)
+                    properties.firstOrNull { it.name == "Nueva propiedad" }?.let { created.complete(it) }
+                }
+            }
+            try {
+                initial.await()
+                repository.create("  Nueva propiedad  ", "  Calle 2  ")
+                val property = created.await()
+                assertEquals("Calle 2", property.address)
+                assertEquals(PropertyStatus.PENDIENTE, property.status)
+                assertEquals(2, database.propertyDao().getAll().size)
+            } finally {
+                collector.cancelAndJoin()
+            }
+        }
+    }
+
+    fun testRepositoryRejectsBlankFields() = runBlocking {
+        val repository = PropertyRepository(database.propertyDao())
+        for ((name, address) in listOf("" to "Calle 1", "   " to "Calle 1", "Nombre" to "", "Nombre" to "   ")) {
+            try {
+                repository.create(name, address)
+                fail("Debe rechazar campos vacíos")
+            } catch (_: IllegalArgumentException) {
+                assertEquals(1, database.propertyDao().getAll().size)
+            }
+        }
+    }
+
+    fun testPropertyStatusesRoundTrip() = runBlocking {
+        for (status in PropertyStatus.entries) {
+            val id = database.propertyDao().insert(PropertyEntity(name = status.name, address = "Calle 1", status = status))
+            assertEquals(status, database.propertyDao().getById(id)!!.status)
+        }
+    }
+
+    fun testViewModelValidatesAndPreservesForm() {
+        onMain {
+            val store = ViewModelStore()
+            val viewModel = PropertyViewModel(PropertyRepository(database.propertyDao()))
+            store.put("properties", viewModel)
+            try {
+                viewModel.openCreateDialog()
+                viewModel.updateName("Departamento")
+                viewModel.updateAddress("   ")
+                viewModel.createProperty()
+                assertNotNull(viewModel.form.error)
+                assertEquals("Departamento", viewModel.form.name)
+                assertFalse(viewModel.form.isSaving)
+                viewModel.dismissCreateDialog()
+                assertFalse(viewModel.form.isOpen)
+            } finally {
+                store.clear()
+            }
+        }
+    }
+
+    @OptIn(ExperimentalSerializationApi::class)
+    fun testTypedRoomsRouteDeclaresLongPropertyId() {
+        val descriptor = RoomsRoute.serializer().descriptor
+        assertEquals(1, descriptor.elementsCount)
+        assertEquals("propertyId", descriptor.getElementName(0))
+        assertEquals(PrimitiveKind.LONG, descriptor.getElementDescriptor(0).kind)
+    }
+
+    private fun onMain(action: () -> Unit) {
+        val task = FutureTask(action, Unit)
+        Handler(Looper.getMainLooper()).post(task)
+        task.get(10, TimeUnit.SECONDS)
     }
 }

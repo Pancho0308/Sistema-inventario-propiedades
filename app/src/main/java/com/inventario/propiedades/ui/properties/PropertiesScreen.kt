@@ -1,0 +1,179 @@
+package com.inventario.propiedades.ui.properties
+
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Card
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.inventario.propiedades.data.local.PropertyStatus
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun PropertiesScreen(viewModel: PropertyViewModel, onPropertyClick: (Long) -> Unit) {
+    val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val error = state.error
+    Scaffold(
+        topBar = { TopAppBar(title = { Text("Propiedades") }) },
+        floatingActionButton = {
+            FloatingActionButton(
+                onClick = viewModel::openCreateDialog,
+                modifier = Modifier.size(56.dp).semantics { contentDescription = "Crear propiedad" },
+            ) {
+                Text("+", style = MaterialTheme.typography.headlineLarge, modifier = Modifier.clearAndSetSemantics { })
+            }
+        },
+    ) { padding ->
+        when {
+            state.isLoading -> Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(Modifier.semantics { contentDescription = "Cargando propiedades" })
+            }
+            error != null -> Box(Modifier.fillMaxSize().padding(padding).padding(24.dp)) {
+                Text(error, color = MaterialTheme.colorScheme.error, modifier = Modifier.semantics {
+                    liveRegion = LiveRegionMode.Polite
+                })
+            }
+            state.properties.isEmpty() -> Box(Modifier.fillMaxSize().padding(padding).padding(24.dp)) {
+                Text("Aún no hay propiedades. Toca + para crear la primera.")
+            }
+            else -> LazyColumn(
+                modifier = Modifier.fillMaxSize().padding(padding),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 96.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                items(state.properties, key = { it.id }) { property ->
+                    Card(
+                        onClick = { onPropertyClick(property.id) },
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 104.dp),
+                    ) {
+                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(property.name, style = MaterialTheme.typography.titleMedium)
+                            Text(property.address, style = MaterialTheme.typography.bodyMedium)
+                            PropertyStatusChip(property.status)
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if (viewModel.form.isOpen) CreatePropertyDialog(viewModel)
+}
+
+@Composable
+private fun PropertyStatusChip(status: PropertyStatus) {
+    val (background, foreground) = when (status) {
+        PropertyStatus.PENDIENTE -> Color(0xFFFFF3CD) to Color(0xFF664D03)
+        PropertyStatus.EN_CURSO -> Color(0xFFDCEBFF) to Color(0xFF123F7A)
+        PropertyStatus.LISTO -> Color(0xFFDDF3E4) to Color(0xFF185B35)
+    }
+    // El chip informa un estado; no agrega una acción táctil sin utilidad.
+    Surface(shape = CircleShape, color = background, contentColor = foreground) {
+        Text(
+            status.name.replace('_', ' '),
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+            style = MaterialTheme.typography.labelLarge,
+        )
+    }
+}
+
+@Composable
+private fun CreatePropertyDialog(viewModel: PropertyViewModel) {
+    val form = viewModel.form
+    AlertDialog(
+        onDismissRequest = viewModel::dismissCreateDialog,
+        title = { Text("Nueva propiedad") },
+        text = {
+            val focusRequester = remember { FocusRequester() }
+            LaunchedEffect(Unit) { focusRequester.requestFocus() }
+            Column(
+                modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                OutlinedTextField(
+                    value = form.name,
+                    onValueChange = viewModel::updateName,
+                    label = { Text("Nombre") },
+                    singleLine = true,
+                    enabled = !form.isSaving,
+                    isError = form.error != null && form.name.isBlank(),
+                    modifier = Modifier.fillMaxWidth().focusRequester(focusRequester),
+                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Next),
+                )
+                OutlinedTextField(
+                    value = form.address,
+                    onValueChange = viewModel::updateAddress,
+                    label = { Text("Dirección") },
+                    singleLine = true,
+                    enabled = !form.isSaving,
+                    isError = form.error != null && form.address.isBlank(),
+                    modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = { viewModel.createProperty() }),
+                )
+                form.error?.let { error ->
+                    Text(error, color = MaterialTheme.colorScheme.error, modifier = Modifier.semantics {
+                        liveRegion = LiveRegionMode.Polite
+                    })
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = viewModel::createProperty,
+                enabled = !form.isSaving && form.name.isNotBlank() && form.address.isNotBlank(),
+                modifier = Modifier.heightIn(min = 48.dp),
+            ) {
+                Text(if (form.isSaving) "Guardando…" else "Crear")
+            }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = viewModel::dismissCreateDialog,
+                enabled = !form.isSaving,
+                modifier = Modifier.heightIn(min = 48.dp),
+            ) {
+                Text("Cancelar")
+            }
+        },
+    )
+}

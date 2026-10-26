@@ -8,5 +8,5 @@ data class PropertyEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val name: String,
     val address: String,
-    val status: String = "PENDIENTE",
+    val status: PropertyStatus = PropertyStatus.PENDIENTE,
 )
