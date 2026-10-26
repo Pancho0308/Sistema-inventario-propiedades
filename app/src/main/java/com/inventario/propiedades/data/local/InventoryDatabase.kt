@@ -8,7 +8,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
     entities = [PropertyEntity::class, RoomEntity::class, ItemEntity::class],
-    version = 1,
+    version = 2,
     exportSchema = true,
 )
 abstract class InventoryDatabase : RoomDatabase() {
@@ -32,7 +32,7 @@ abstract class InventoryDatabase : RoomDatabase() {
                     context.applicationContext,
                     InventoryDatabase::class.java,
                     "inventory.db",
-                ).addCallback(seedCallback).build().also { instance = it }
+                ).addMigrations(MIGRATION_1_2).addCallback(seedCallback).build().also { instance = it }
             }
     }
 }

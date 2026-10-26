@@ -17,8 +17,12 @@ android {
         versionCode = 1
         versionName = "1.0"
         testInstrumentationRunner = "android.test.InstrumentationTestRunner"
-        testInstrumentationRunnerArguments["class"] =
-            "com.inventario.propiedades.InventoryDatabaseTest"
+        // shortcut: enumera clases homónimas a *Test.kt para evitar el escaneo DEX; ampliar si cambia esa convención.
+        testInstrumentationRunnerArguments["class"] = fileTree("src/androidTest/java") {
+            include("**/*Test.kt")
+        }.files.map {
+            it.relativeTo(file("src/androidTest/java")).invariantSeparatorsPath.removeSuffix(".kt").replace('/', '.')
+        }.sorted().joinToString(",")
 
         javaCompileOptions {
             annotationProcessorOptions {

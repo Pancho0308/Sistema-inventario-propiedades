@@ -5,9 +5,16 @@ import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.Query
 import androidx.room.Update
+import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface ItemDao {
+    @Query("SELECT * FROM items WHERE roomId = :roomId ORDER BY id")
+    fun observeByRoom(roomId: Long): Flow<List<ItemEntity>>
+
+    @Query("UPDATE items SET status = :status WHERE id = :itemId AND roomId = :roomId")
+    suspend fun updateStatus(roomId: Long, itemId: Long, status: ItemStatus): Int
+
     @Query("SELECT * FROM items WHERE roomId = :roomId ORDER BY id")
     suspend fun getByRoom(roomId: Long): List<ItemEntity>
 

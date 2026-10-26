@@ -19,7 +19,7 @@ data class ItemEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val roomId: Long,
     val name: String,
-    val status: ItemStatus,
+    val status: ItemStatus? = null,
     val note: String = "",
     val photoPath: String? = null,
 )
