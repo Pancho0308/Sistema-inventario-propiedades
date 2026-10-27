@@ -10,6 +10,7 @@ import androidx.lifecycle.ViewModelStore
 import androidx.room.Room
 import com.inventario.propiedades.data.PropertyRepository
 import com.inventario.propiedades.data.PhotoStorage
+import com.inventario.propiedades.data.TemplateRepository
 import java.io.File
 import com.inventario.propiedades.data.local.InventoryDatabase
 import com.inventario.propiedades.data.local.ItemEntity
@@ -170,7 +171,8 @@ class InventoryDatabaseTest : AndroidTestCase() {
     fun testViewModelValidatesAndPreservesForm() {
         onMain {
             val store = ViewModelStore()
-            val viewModel = PropertyViewModel(PropertyRepository(database, PhotoStorage(File(context.cacheDir, "inventory-database-test"))))
+            val viewModel = PropertyViewModel(PropertyRepository(database,
+                PhotoStorage(File(context.cacheDir, "inventory-database-test"))), TemplateRepository(database))
             store.put("properties", viewModel)
             try {
                 viewModel.openCreateDialog()

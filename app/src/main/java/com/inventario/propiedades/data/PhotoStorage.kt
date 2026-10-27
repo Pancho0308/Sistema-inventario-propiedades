@@ -90,6 +90,17 @@ class PhotoStorage(filesDir: File) {
         if (file.exists() && (!file.isFile || !file.delete())) throw IOException("No se pudo eliminar el archivo de foto")
     }
 
+    fun cleanupUnreferenced(referencedPaths: List<String>) {
+        val referenced = referencedPaths.mapNotNull { ownedFile(it)?.path }.toSet()
+        if (!directory.exists()) return
+        val files = directory.listFiles() ?: throw IOException("No se pudo revisar la carpeta de fotos")
+        val orphanPaths = files.mapNotNull { file ->
+            val owned = ownedFile(file.path)
+            if (owned != null && owned.isFile && owned.path !in referenced) owned.path else null
+        }
+        deleteAll(orphanPaths)
+    }
+
     fun deleteAll(paths: List<String>) {
         var failure: IOException? = null
         paths.distinct().forEach { path ->

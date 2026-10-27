@@ -9,6 +9,9 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface ItemDao {
+    @Query("SELECT photoPath FROM items WHERE photoPath IS NOT NULL")
+    suspend fun getAllPhotoPaths(): List<String>
+
     @Query("SELECT * FROM items WHERE roomId = :roomId ORDER BY id")
     fun observeByRoom(roomId: Long): Flow<List<ItemEntity>>
 

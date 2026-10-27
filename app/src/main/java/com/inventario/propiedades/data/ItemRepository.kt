@@ -29,7 +29,11 @@ class ItemRepository(
     suspend fun markUnreviewedAsGood(roomId: Long): Int =
         itemDao.updateUnreviewedStatus(roomId, ItemStatus.BUENO)
 
-    // shortcut: un cierre forzado entre disco y Room puede dejar huérfanos, añadir reconciliación al inicio si se requiere recuperarlos.
+    suspend fun cleanupUnusedPhotos() = withContext(Dispatchers.IO) {
+        val referenced = itemDao.getAllPhotoPaths()
+        photos.cleanupUnreferenced(referenced)
+    }
+
     suspend fun savePhoto(roomId: Long, itemId: Long, capture: File) = withContext(Dispatchers.IO) {
         val newPhoto = photos.saveCapture(capture)
         // Una cancelación no puede dejar el archivo nuevo sin referencia a mitad del cambio.

@@ -14,6 +14,9 @@ import com.inventario.propiedades.ui.photos.CameraScreen
 import com.inventario.propiedades.ui.photos.CameraViewModel
 import com.inventario.propiedades.data.PropertyRepository
 import com.inventario.propiedades.data.RoomRepository
+import com.inventario.propiedades.data.TemplateRepository
+import com.inventario.propiedades.ui.templates.TemplatesScreen
+import com.inventario.propiedades.ui.templates.TemplatesViewModel
 import com.inventario.propiedades.ui.checklist.ChecklistScreen
 import com.inventario.propiedades.ui.checklist.ChecklistViewModel
 import com.inventario.propiedades.ui.properties.PropertiesScreen
@@ -26,6 +29,9 @@ import kotlinx.serialization.Serializable
 object PropertiesRoute
 
 @Serializable
+object TemplatesRoute
+
+@Serializable
 data class RoomsRoute(val propertyId: Long)
 
 @Serializable
@@ -35,18 +41,20 @@ data class ChecklistRoute(val roomId: Long)
 data class CameraRoute(val roomId: Long, val itemId: Long)
 
 @Composable
-fun AppNavigation(repository: PropertyRepository, roomRepository: RoomRepository, itemRepository: ItemRepository, photos: PhotoStorage) {
+fun AppNavigation(repository: PropertyRepository, roomRepository: RoomRepository, itemRepository: ItemRepository,
+    photos: PhotoStorage, templateRepository: TemplateRepository) {
     val navController = rememberNavController()
     NavHost(navController = navController, startDestination = PropertiesRoute) {
         composable<PropertiesRoute> {
             val propertyViewModel: PropertyViewModel = viewModel(factory = viewModelFactory {
-                initializer { PropertyViewModel(repository) }
+                initializer { PropertyViewModel(repository, templateRepository) }
             })
             PropertiesScreen(
                 viewModel = propertyViewModel,
                 onPropertyClick = { propertyId ->
                     navController.navigate(RoomsRoute(propertyId)) { launchSingleTop = true }
                 },
+                onTemplates = { navController.navigate(TemplatesRoute) { launchSingleTop = true } },
             )
         }
         composable<RoomsRoute> { entry ->
@@ -79,6 +87,12 @@ fun AppNavigation(repository: PropertyRepository, roomRepository: RoomRepository
             CameraScreen(cameraViewModel,
                 onBack = { navController.popBackStack() },
                 onSaved = { navController.popBackStack() })
+        }
+        composable<TemplatesRoute> {
+            val templatesViewModel: TemplatesViewModel = viewModel(factory = viewModelFactory {
+                initializer { TemplatesViewModel(templateRepository) }
+            })
+            TemplatesScreen(templatesViewModel, onBack = { navController.popBackStack() })
         }
     }
 }

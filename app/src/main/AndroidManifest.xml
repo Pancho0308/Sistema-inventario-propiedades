@@ -3,6 +3,7 @@
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera.any" android:required="false" />
     <application
+        android:name=".InventoryApplication"
         android:allowBackup="false"
         android:label="Inventario de propiedades"
         android:supportsRtl="true"
